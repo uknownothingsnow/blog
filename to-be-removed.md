@@ -1,0 +1,4 @@
+音乐的二维码扫描可以考虑换成一淘火眼
+音乐的ViewDragHelper
+音乐的ActionBarActivity
+音乐的UserInfoActivity可以删除

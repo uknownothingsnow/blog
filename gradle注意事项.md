@@ -1,0 +1,1 @@
+provided不能适用aar，资源问题

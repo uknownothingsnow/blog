@@ -1,0 +1,42 @@
+从这篇blog开始，我准备写一个关于Android动态加载的博客，主要Android插件开发的原理，前面几篇主要以携程开源的[DynamicAPK](https://github.com/CtripMobile/DynamicAPK)
+的源码作为基础来进行分析，后面可能会对该库进行一些改进，并提交到我自己fork的repo中，欢迎感兴趣的同学一起来交流。
+
+这篇主要先介绍一下DynamicAPK中的一些基本的概念，以及DynamicAPK中的插件的存储。关于动态加载的基础知识，欢迎参考我之前写的blog[Android热更新实现原理](http://blog.csdn.net/lzyzsd/article/details/49843581)
+
+DynamicAPK中bundle的可以理解插件，一个bundle对应了一个插件。但是bundle中会包含版本信息，所以其实bundle其实是对应了一个插件的n个版本。
+
+Bundle接口，用来统一管理插件bundle的声明周期，定义了获取bundle id，获取bundle 存储位置信息，以及更新bundle的一系列接口。
+Archive接口，管理bundle存储的目录结构，每个bundle下，会根据bundle的版本号，生成一个version_+版本号的目录。
+BundleArchiveRevision，用来表示每个版本的bundle真正存储的目录，里面包含bundle的dex文件，以及dexopt之后的dex文件。
+
+简单的介绍了几个概念之后，我们先来看看DynamicAPK打包之后，是怎么在apk中存放bundle插件的吧。
+Dynamic在打包的时候，会将所有的插件bundle命名为为.so后缀，其实就是一个dex文件，然后将所有的bundle文件打包到主APP的assets/baseres目录下，运行的时候
+会将这些文件copy到app目录下。
+以携程的demo为例，下面是最终打包之后的apk，解压的截图
+
+
+下面，我们来看一下DynamicAPK具体是怎么存储每一个bundle的。
+
+因为Android的安全限制，只能运行app目录下的dex文件，所有的插件都是存储在app目录下file/storage这个目录中。以携程的demo为例
+ls file/storage
+1
+2
+meta
+可以看到storage目录下有1，2两个目录和一个meta文件。其中1，2两个目录分别对象demo项目中的demo1和demo2两个插件，1，2是DynamicAPK为了管理和标示
+这个两个插件，为它们生成的id。meta文件中存储了下一个可以使用的ID，这里存储的就是3。
+
+插件的id对应到源码中都是由Framework类来统一管理的。这里的meta文件也是由Framework类来负责更新。
+
+然后我们切到1目录下，会看到1目录下有一个meta文件和一个version_1目录。meta文件中存储的是插件的ID和插件的名字也就是插件的包名。version_1目录的名字是由version+_+插件revisionID来组成的。
+revisionID就是插件的版本id，也就是说1目录下其实是可能有多个version_数字目录的，如果插件有多个版本的话。
+
+该目录对应到源码中，是由BundleImpl类来管理的，BundleImpl实现了Bundle接口，每个插件都会对应一个BundleImpl对象。meta文件也是由BundleImpl类来负责更新。
+
+切到version_1目录，还是有一个meta文件，这个meta文件本意应该是存储最终的该版本的插件的存储路径的，但是携程代码里的bug导致这里只写入了file:，并且这个文件其实并没有什么卵用。
+该目录下另外还有两个文件bundle.zip和bundle.dex。bundle.zip其实就是assets/baseres/ctrip_android_demo1.so copy过来的，后缀改成了zip。bundle.dex其实是dexopt之后
+生成的dex文件。
+
+该目录对应到源码中，是由一个BundleArchiveRevision对象。多个BundleArchiveRevision对象由一个BundleArchive对象来管理，BundleArchive对象其实是真正负责管理插件的存储的，
+BundleImpl对象中会持有一个BundleArchive对象。
+
+最后附上一张图来说明一下这三个类的关系，以及他们所管理的目录。
